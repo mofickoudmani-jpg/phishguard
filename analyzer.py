@@ -70,14 +70,39 @@ class AnalysisResult:
 #  URL ANALYZER
 # ─────────────────────────────────────────────────────────────────────────────
 
+
+def _detect_scheme(url: str) -> str:
+    """
+    Try connecting on port 443 (HTTPS) first, then port 80 (HTTP).
+    Returns the URL with the correct scheme prepended.
+    """
+    hostname = url.split("/")[0].split("?")[0].split(":")[0]
+    # Try HTTPS first
+    try:
+        ctx = ssl.create_default_context()
+        with socket.create_connection((hostname, 443), timeout=4) as sock:
+            with ctx.wrap_socket(sock, server_hostname=hostname):
+                return "https://" + url
+    except Exception:
+        pass
+    # Fall back to HTTP
+    try:
+        with socket.create_connection((hostname, 80), timeout=4):
+            return "http://" + url
+    except Exception:
+        pass
+    # Can't reach it — default to https for analysis purposes
+    return "https://" + url
+
+
 def analyze_url(url: str) -> AnalysisResult:
     """Full phishing analysis of a URL."""
     indicators = []
     metadata = {}
 
-    # Normalize
+    # Normalize — auto-detect scheme if missing
     if not url.startswith(("http://", "https://")):
-        url = "http://" + url
+        url = _detect_scheme(url)
 
     try:
         parsed = urllib.parse.urlparse(url)
